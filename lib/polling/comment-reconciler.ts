@@ -213,7 +213,7 @@ async function sweepCampaign(
         commentId: { in: needsAction.map((c) => c.id) },
         ...(automation.publicReplyEnabled
           ? { publicReplySentAt: { not: null } }
-          : { status: "SENT" }),
+    : { status: { in: ["SENT", "SKIPPED_DEDUP"] } }),
       },
       select: { commentId: true },
     });
