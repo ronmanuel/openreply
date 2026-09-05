@@ -657,11 +657,18 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           errorMessage: null,
         },
       });
-    } catch (error) {
+       } catch (error) {
       await releaseWorkspaceDMReservation(
         automation.workspaceId,
         usage.periodStart
       );
+
+      // Meta's "already used" rejection is permanent — retrying can never
+      // succeed. Mark it handled instead of FAILED so the reconciler stops
+      // re-queuing it every sweep, and don't re-throw (no point retrying).
+      const isPermanentRejection =
+        error instanceof MetaApiError &&
+        /invalid for a private reply/i.test(error.message);
 
       await prisma.dmLog.update({
         where: {
@@ -671,11 +678,12 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           },
         },
         data: {
-          status: "FAILED",
+          status: isPermanentRejection ? "SKIPPED_DEDUP" : "FAILED",
           attempts: job.attemptsMade + 1,
           errorMessage: formatError(error),
         },
       });
+      if (isPermanentRejection) return;
       throw error;
     }
   }
